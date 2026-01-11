@@ -72,10 +72,18 @@ if uploaded:
         st.metric("Total Objects", len(shapes))
         st.write("Detected Shapes:", shapes)
 
-    st.subheader("Shape Analytics")
-    fig, ax = plt.subplots()
-    ax.bar(set(shapes), [shapes.count(s) for s in set(shapes)])
-    st.pyplot(fig)
+   st.subheader("Shape Analytics")
 
+if len(shapes) > 0:
+    unique_shapes = list(dict.fromkeys(shapes))  # preserves order
+    counts = [shapes.count(s) for s in unique_shapes]
+
+    fig, ax = plt.subplots()
+    ax.bar(unique_shapes, counts)
+    ax.set_xlabel("Shape Type")
+    ax.set_ylabel("Count")
+    ax.set_title("Distribution of Detected Shapes")
+    st.pyplot(fig)
 else:
-    st.info("Upload an image from the sidebar")
+    st.info("No shapes detected for analysis.")
+
