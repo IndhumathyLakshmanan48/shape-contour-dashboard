@@ -172,15 +172,6 @@ if uploaded:
         st.markdown("**Processed Image**")
         st.image(cv2.cvtColor(display, cv2.COLOR_BGR2RGB), use_column_width=True)
 
-    # ---------- SHAPE COMPLEXITY EXPLANATION ----------
-    st.markdown("---")
-    st.subheader("Shape Complexity Interpretation")
-    st.info(
-        "**Simple:** ≤ 4 vertices  \n"
-        "**Moderate:** 5 – 7 vertices  \n"
-        "**Complex:** > 7 vertices"
-    )
-
     # ---------- STEP-BY-STEP GRID ----------
     st.markdown("---")
     st.subheader("Step-by-Step Image Processing")
