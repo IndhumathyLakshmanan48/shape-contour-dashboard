@@ -21,7 +21,11 @@ st.sidebar.header("Controls")
 
 mode = st.sidebar.radio(
     "Detection Mode",
-    ["Shape Mode", "Document Mode"]
+    ["Shape Mode", "Document Mode"],
+    help=(
+        "Shape Mode: Detects multiple independent geometric shapes.\n\n"
+        "Document Mode: Detects a single dominant document-like object."
+    )
 )
 
 uploaded = st.sidebar.file_uploader("Upload Image", type=["jpg", "png", "jpeg"])
@@ -29,16 +33,13 @@ uploaded = st.sidebar.file_uploader("Upload Image", type=["jpg", "png", "jpeg"])
 show_contours = st.sidebar.checkbox("Show Contours", True)
 show_bbox = st.sidebar.checkbox("Show Bounding Box", True)
 show_centroid = st.sidebar.checkbox("Show Centroid", True)
-
 scale = st.sidebar.slider("Pixel → cm Scale", 0.01, 1.0, 0.1)
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### Legend")
-st.sidebar.markdown("🟢 Contours")
-st.sidebar.markdown("🔵 Bounding Box")
-st.sidebar.markdown("🔴 Centroid")
+st.sidebar.markdown("🟢 Contours  |  🔵 Bounding Box  |  🔴 Centroid")
 
-# ================= SHAPE CLASSIFIER =================
+# ================= SHAPE FUNCTIONS =================
 def classify_shape(contour):
     peri = cv2.arcLength(contour, True)
     approx = cv2.approxPolyDP(contour, 0.04 * peri, True)
@@ -105,79 +106,109 @@ if uploaded:
             cx = int(M["m10"] / M["m00"])
             cy = int(M["m01"] / M["m00"])
 
-        results.append([
-            i, shape, complexity, round(area_cm, 2), round(peri_cm, 2)
-        ])
+        results.append([i, shape, complexity, area_cm, peri_cm])
 
         if show_contours:
             cv2.drawContours(display, [c], -1, (0, 255, 0), 2)
-
         if show_bbox:
             x, y, w, h = cv2.boundingRect(c)
             cv2.rectangle(display, (x, y), (x + w, y + h), (255, 0, 0), 2)
-
         if show_centroid:
             cv2.circle(display, (cx, cy), 4, (0, 0, 255), -1)
 
-        cv2.putText(
-            display, shape, (cx + 6, cy),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2
-        )
+        # show only object ID to avoid clutter
+        cv2.putText(display, f"ID {i}", (cx + 6, cy),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
-    # ================= IMAGE COMPARISON =================
-    st.subheader("Image Comparison")
-    c1, c2 = st.columns(2)
+    # Convert results to DataFrame
+    df = pd.DataFrame(
+        results,
+        columns=["Object ID", "Shape Type", "Complexity", "Area (cm²)", "Perimeter (cm)"]
+    )
 
-    with c1:
-        st.markdown("**Original Image**")
-        st.image(image, use_column_width=True)
+    # ================= TABS =================
+    tab1, tab2, tab3 = st.tabs(["🖼 Images", "📐 Measurements", "📊 Analytics"])
 
-    with c2:
-        st.markdown("**Processed Image**")
-        st.image(cv2.cvtColor(display, cv2.COLOR_BGR2RGB), use_column_width=True)
+    # ---------- TAB 1: IMAGES ----------
+    with tab1:
+        st.subheader("Original vs Processed Image")
 
-    st.markdown("---")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Original Image**")
+            st.image(image, use_column_width=True)
+        with c2:
+            st.markdown("**Processed Image**")
+            st.image(cv2.cvtColor(display, cv2.COLOR_BGR2RGB), use_column_width=True)
 
-    # ================= METRICS =================
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Total Objects", len(results))
-    m2.metric("Detection Mode", mode)
-    m3.metric("Scale (cm/pixel)", scale)
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Objects", len(df))
+        m2.metric("Detection Mode", mode)
+        m3.metric("Scale (cm/pixel)", scale)
 
-    # ================= TABLE =================
-    st.subheader("Geometric Feature Measurements")
+    # ---------- TAB 2: MEASUREMENTS ----------
+    with tab2:
+        st.subheader("Geometric Feature Measurements")
 
-    if results:
-        df = pd.DataFrame(
-            results,
-            columns=[
-                "Object ID", "Shape Type", "Complexity",
-                "Area (cm²)", "Perimeter (cm)"
-            ]
-        )
-        st.dataframe(df.style.hide(axis="index"), use_container_width=True)
+        if not df.empty:
+            st.dataframe(df.style.hide(axis="index"), use_container_width=True)
 
-        # DOWNLOAD BUTTON
-        st.download_button(
-            "⬇ Download Measurements (CSV)",
-            df.to_csv(index=False),
-            "shape_measurements.csv",
-            "text/csv"
-        )
-    else:
-        st.warning("No valid shapes detected.")
+            st.download_button(
+                "⬇ Download Measurements (CSV)",
+                df.to_csv(index=False),
+                "shape_measurements.csv",
+                "text/csv"
+            )
+        else:
+            st.warning("No shapes detected.")
 
-    # ================= SMALL GRAPH =================
-    st.subheader("Shape Distribution")
+    # ---------- TAB 3: ANALYTICS ----------
+    with tab3:
+        if not df.empty:
+            st.subheader("Shape Summary")
 
-    if results:
-        counts = df["Shape Type"].value_counts()
-        fig, ax = plt.subplots(figsize=(4.5, 3))
-        ax.bar(counts.index, counts.values)
-        ax.set_xlabel("Shape Type")
-        ax.set_ylabel("Count")
-        ax.set_title("Detected Shapes")
-        st.pyplot(fig)
+            counts = df["Shape Type"].value_counts()
+
+            k1, k2, k3 = st.columns(3)
+            k1.metric("Most Common Shape", counts.idxmax())
+            k2.metric("Total Shape Types", len(counts))
+            k3.metric("Max Count", counts.max())
+
+            st.markdown("---")
+
+            # Bar chart
+            fig1, ax1 = plt.subplots(figsize=(4.5, 3))
+            ax1.bar(counts.index, counts.values)
+            ax1.set_title("Shape Distribution")
+            ax1.set_xlabel("Shape Type")
+            ax1.set_ylabel("Count")
+            st.pyplot(fig1)
+
+            # Pie chart
+            fig2, ax2 = plt.subplots(figsize=(4, 4))
+            ax2.pie(counts.values, labels=counts.index, autopct="%1.1f%%", startangle=90)
+            ax2.set_title("Shape Proportion")
+            ax2.axis("equal")
+            st.pyplot(fig2)
+
+            st.markdown("---")
+
+            # Scatter plot: Area vs Perimeter
+            st.subheader("Area vs Perimeter Analysis")
+
+            fig3, ax3 = plt.subplots(figsize=(5, 4))
+            for shape in df["Shape Type"].unique():
+                subset = df[df["Shape Type"] == shape]
+                ax3.scatter(subset["Area (cm²)"], subset["Perimeter (cm)"], label=shape)
+
+            ax3.set_xlabel("Area (cm²)")
+            ax3.set_ylabel("Perimeter (cm)")
+            ax3.set_title("Area vs Perimeter Relationship")
+            ax3.legend()
+            st.pyplot(fig3)
+
+        else:
+            st.warning("No data available for analytics.")
 
 else:
     st.info("Upload an image from the sidebar to begin analysis.")
