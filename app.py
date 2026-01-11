@@ -49,6 +49,20 @@ st.sidebar.markdown(
     unsafe_allow_html=True
 )
 
+st.sidebar.markdown("---")
+
+st.sidebar.markdown("### Shape Complexity")
+st.sidebar.markdown(
+    """
+    <div style="font-size:13px; line-height:1.6;">
+    <b>Simple</b>: ≤ 4 vertices<br>
+    <b>Moderate</b>: 5 – 7 vertices<br>
+    <b>Complex</b>: &gt; 7 vertices
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
 # ================= SHAPE FUNCTIONS =================
 def classify_shape(contour):
     peri = cv2.arcLength(contour, True)
