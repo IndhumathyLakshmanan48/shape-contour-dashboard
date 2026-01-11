@@ -65,7 +65,12 @@ if uploaded is not None:
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
-    _, thresh = cv2.threshold(blur, 200, 255, cv2.THRESH_BINARY_INV)
+
+    edges = cv2.Canny(blur, 50, 150)
+
+    kernel = np.ones((3, 3), np.uint8)
+    thresh = cv2.dilate(edges, kernel, iterations=1)
+
 
     contours, _ = cv2.findContours(
         thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
