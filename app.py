@@ -91,6 +91,7 @@ if uploaded:
         kernel = np.ones((3, 3), np.uint8)
         thresh = cv2.dilate(edges, kernel, iterations=1)
     else:
+        edges = None
         _, thresh = cv2.threshold(blur, 180, 255, cv2.THRESH_BINARY_INV)
 
     contours, _ = cv2.findContours(
@@ -117,7 +118,7 @@ if uploaded:
         peri_cm = peri_px * scale
 
         M = cv2.moments(c)
-        cx, cy = 0, 0
+        cx, cy = (0, 0)
         if M["m00"] != 0:
             cx = int(M["m10"] / M["m00"])
             cy = int(M["m01"] / M["m00"])
@@ -127,7 +128,6 @@ if uploaded:
             round(area_cm, 2), round(peri_cm, 2)
         ])
 
-        # Crop detected object for gallery
         x, y, w, h = cv2.boundingRect(c)
         crop = img[y:y+h, x:x+w]
         shape_crops.append((i, crop))
@@ -141,12 +141,10 @@ if uploaded:
         if show_centroid:
             cv2.circle(display, (cx, cy), 4, (0, 0, 255), -1)
 
-        # Clear ID label with background
         label = f"ID {i}"
-        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
-        cv2.rectangle(display, (cx+6, cy-th-8), (cx+6+tw+4, cy), (0,0,0), -1)
-        cv2.putText(display, label, (cx+8, cy-4),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255,255,255), 1)
+        cv2.rectangle(display, (cx+6, cy-18), (cx+60, cy-2), (0, 0, 0), -1)
+        cv2.putText(display, label, (cx+8, cy-6),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
 
     # ---------- IMAGE COMPARISON ----------
     st.subheader("Image Comparison")
@@ -157,7 +155,7 @@ if uploaded:
         st.image(image, use_column_width=True)
 
     with col2:
-        st.markdown("**Processed Image (Contours & IDs)**")
+        st.markdown("**Processed Image**")
         st.image(cv2.cvtColor(display, cv2.COLOR_BGR2RGB), use_column_width=True)
 
     # ---------- SHAPE COMPLEXITY EXPLANATION ----------
@@ -169,20 +167,26 @@ if uploaded:
         "**Complex:** > 7 vertices"
     )
 
-    # ---------- STEP-BY-STEP PROCESSING VIEWER ----------
+    # ---------- STEP-BY-STEP GRID ----------
     st.markdown("---")
     st.subheader("Step-by-Step Image Processing")
 
-    with st.expander("View Grayscale Image"):
+    r1c1, r1c2 = st.columns(2)
+    with r1c1:
+        st.markdown("**Grayscale**")
         st.image(gray, use_column_width=True)
 
-    with st.expander("View Blurred Image"):
+    with r1c2:
+        st.markdown("**Blurred**")
         st.image(blur, use_column_width=True)
 
-    with st.expander("View Edge Detection"):
-        st.image(edges if mode == "Shape Mode" else thresh, use_column_width=True)
+    r2c1, r2c2 = st.columns(2)
+    with r2c1:
+        st.markdown("**Edge Detection**")
+        st.image(edges if edges is not None else thresh, use_column_width=True)
 
-    with st.expander("View Final Contours"):
+    with r2c2:
+        st.markdown("**Final Contours**")
         st.image(cv2.cvtColor(display, cv2.COLOR_BGR2RGB), use_column_width=True)
 
     # ---------- SHAPE GALLERY ----------
@@ -199,22 +203,38 @@ if uploaded:
     st.markdown("---")
     st.subheader("Geometric Feature Measurements")
 
-    if results:
-        df = pd.DataFrame(
-            results,
-            columns=[
-                "Object ID", "Shape Type", "Complexity",
-                "Area (cm²)", "Perimeter (cm)"
-            ]
-        )
-        st.dataframe(df.style.hide(axis="index"), use_container_width=True)
+    df = pd.DataFrame(
+        results,
+        columns=[
+            "Object ID", "Shape Type", "Complexity",
+            "Area (cm²)", "Perimeter (cm)"
+        ]
+    )
 
-        st.download_button(
-            "Download Measurements (CSV)",
-            df.to_csv(index=False),
-            "shape_measurements.csv",
-            "text/csv"
-        )
+    st.dataframe(df.style.hide(axis="index"), use_container_width=True)
+
+    # ---------- DISTRIBUTION GRAPHS ----------
+    st.markdown("---")
+    st.subheader("Shape Distribution Analysis")
+
+    if not df.empty:
+        counts = df["Shape Type"].value_counts()
+
+        g1, g2 = st.columns(2)
+
+        with g1:
+            fig1, ax1 = plt.subplots(figsize=(4, 3))
+            ax1.bar(counts.index, counts.values)
+            ax1.set_title("Shape Distribution")
+            ax1.set_ylabel("Count")
+            st.pyplot(fig1)
+
+        with g2:
+            fig2, ax2 = plt.subplots(figsize=(4, 3))
+            ax2.pie(counts.values, labels=counts.index, autopct="%1.0f%%", startangle=90)
+            ax2.set_title("Shape Proportion")
+            ax2.axis("equal")
+            st.pyplot(fig2)
 
 else:
     st.info("Upload an image from the sidebar to begin analysis.")
