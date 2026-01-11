@@ -11,7 +11,7 @@ st.set_page_config(page_title="Shape & Contour Analyzer", layout="wide")
 # ================= HEADER =================
 st.markdown("<h2 style='text-align:center;'>Shape & Contour Analyzer</h2>", unsafe_allow_html=True)
 st.markdown(
-    "<p style='text-align:center;'>Geometric Shape Detection, Measurement & Feature Extraction</p>",
+    "<p style='text-align:center;'>Geometric Shape Detection, Feature Extraction & Visual Analysis</p>",
     unsafe_allow_html=True
 )
 st.markdown("---")
@@ -23,7 +23,7 @@ mode = st.sidebar.radio(
     "Detection Mode",
     ["Shape Mode", "Document Mode"],
     help=(
-        "Shape Mode: Detects multiple independent geometric objects.\n\n"
+        "Shape Mode: Detects multiple geometric objects.\n\n"
         "Document Mode: Detects a single dominant document-like object."
     )
 )
@@ -78,6 +78,7 @@ def shape_complexity(vertices):
 # ================= MAIN =================
 if uploaded:
 
+    # ---------- LOAD IMAGE ----------
     image = np.array(Image.open(uploaded).convert("RGB"))
     img = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
@@ -92,10 +93,13 @@ if uploaded:
     else:
         _, thresh = cv2.threshold(blur, 180, 255, cv2.THRESH_BINARY_INV)
 
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(
+        thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
 
     display = img.copy()
     results = []
+    shape_crops = []
 
     # ---------- CONTOUR LOOP ----------
     for i, c in enumerate(contours, 1):
@@ -113,58 +117,41 @@ if uploaded:
         peri_cm = peri_px * scale
 
         M = cv2.moments(c)
+        cx, cy = 0, 0
         if M["m00"] != 0:
             cx = int(M["m10"] / M["m00"])
             cy = int(M["m01"] / M["m00"])
-        else:
-            cx, cy = 0, 0
 
         results.append([
             i, shape, complexity,
             round(area_cm, 2), round(peri_cm, 2)
         ])
 
+        # Crop detected object for gallery
+        x, y, w, h = cv2.boundingRect(c)
+        crop = img[y:y+h, x:x+w]
+        shape_crops.append((i, crop))
+
         if show_contours:
             cv2.drawContours(display, [c], -1, (0, 255, 0), 2)
 
         if show_bbox:
-            x, y, w, h = cv2.boundingRect(c)
             cv2.rectangle(display, (x, y), (x + w, y + h), (255, 0, 0), 2)
 
         if show_centroid:
             cv2.circle(display, (cx, cy), 4, (0, 0, 255), -1)
 
-        # ---------- CLEAR ID LABEL WITH BACKGROUND ----------
+        # Clear ID label with background
         label = f"ID {i}"
-        (tw, th), _ = cv2.getTextSize(
-            label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1
-        )
+        (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
+        cv2.rectangle(display, (cx+6, cy-th-8), (cx+6+tw+4, cy), (0,0,0), -1)
+        cv2.putText(display, label, (cx+8, cy-4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255,255,255), 1)
 
-        offset_x = cx + 10
-        offset_y = cy - 10 - (i % 3) * 12   # spacing to avoid overlap
-
-        cv2.rectangle(
-            display,
-            (offset_x - 2, offset_y - th - 4),
-            (offset_x + tw + 2, offset_y + 2),
-            (0, 0, 0),
-            -1
-        )
-
-        cv2.putText(
-            display,
-            label,
-            (offset_x, offset_y),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.45,
-            (255, 255, 255),
-            1
-        )
-
-    # ---------- IMAGE DISPLAY ----------
+    # ---------- IMAGE COMPARISON ----------
     st.subheader("Image Comparison")
-
     col1, col2 = st.columns(2)
+
     with col1:
         st.markdown("**Original Image**")
         st.image(image, use_column_width=True)
@@ -173,12 +160,40 @@ if uploaded:
         st.markdown("**Processed Image (Contours & IDs)**")
         st.image(cv2.cvtColor(display, cv2.COLOR_BGR2RGB), use_column_width=True)
 
-    # ---------- METRICS ----------
-    st.markdown("### Summary Metrics")
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Total Objects", len(results))
-    m2.metric("Detection Mode", mode)
-    m3.metric("Scale (cm/pixel)", scale)
+    # ---------- SHAPE COMPLEXITY EXPLANATION ----------
+    st.markdown("---")
+    st.subheader("Shape Complexity Interpretation")
+    st.info(
+        "**Simple:** ≤ 4 vertices  \n"
+        "**Moderate:** 5 – 7 vertices  \n"
+        "**Complex:** > 7 vertices"
+    )
+
+    # ---------- STEP-BY-STEP PROCESSING VIEWER ----------
+    st.markdown("---")
+    st.subheader("Step-by-Step Image Processing")
+
+    with st.expander("View Grayscale Image"):
+        st.image(gray, use_column_width=True)
+
+    with st.expander("View Blurred Image"):
+        st.image(blur, use_column_width=True)
+
+    with st.expander("View Edge Detection"):
+        st.image(edges if mode == "Shape Mode" else thresh, use_column_width=True)
+
+    with st.expander("View Final Contours"):
+        st.image(cv2.cvtColor(display, cv2.COLOR_BGR2RGB), use_column_width=True)
+
+    # ---------- SHAPE GALLERY ----------
+    st.markdown("---")
+    st.subheader("Detected Objects Gallery")
+
+    if shape_crops:
+        cols = st.columns(min(4, len(shape_crops)))
+        for idx, (obj_id, crop) in enumerate(shape_crops):
+            with cols[idx % len(cols)]:
+                st.image(crop, caption=f"ID {obj_id}", use_column_width=True)
 
     # ---------- TABLE ----------
     st.markdown("---")
@@ -200,8 +215,6 @@ if uploaded:
             "shape_measurements.csv",
             "text/csv"
         )
-    else:
-        st.warning("No valid shapes detected.")
 
 else:
     st.info("Upload an image from the sidebar to begin analysis.")
